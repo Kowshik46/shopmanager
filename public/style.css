@@ -123,3 +123,40 @@ tr.low-stock-row { background: #fff3f3; }
 }
 .history-card .meta { display: flex; justify-content: space-between; font-weight: 600; }
 .history-card ul { margin: 8px 0 0 0; padding-left: 18px; font-size: 13px; color: #444; }
+
+/* ---- Batch modal ---- */
+.modal-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.4);
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+.modal-overlay.open { display: flex; }
+.modal {
+  background: white;
+  border-radius: 10px;
+  padding: 20px;
+  width: 90%;
+  max-width: 420px;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+.modal h3 { margin-top: 0; }
+.modal form { display: flex; flex-direction: column; gap: 10px; }
+.modal label { font-size: 13px; color: #444; display: flex; flex-direction: column; gap: 4px; }
+.modal input, .modal select {
+  padding: 8px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px;
+}
+.price-row { display: flex; gap: 8px; }
+.price-row label { flex: 1; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px; }
+.secondary-btn { background: #ccc; color: #222; }
+
+.add-batch-btn { background: #2e7d32; padding: 6px 10px; font-size: 13px; }
+
+select.batch-select { padding: 6px; font-size: 13px; max-width: 160px; }
+
+.batch-hint { font-size: 12px; color: #666; margin-top: -6px; margin-bottom: 8px; }

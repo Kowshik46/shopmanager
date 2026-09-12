@@ -14,43 +14,44 @@ const supabase = createClient(
   process.env.SUPABASE_SECRET_KEY // service/secret key — bypasses RLS, server-side only
 );
 
+const CATEGORIES = ['Tablet', 'Syrup', 'Ointment', 'Other'];
+
 // ---------- Products ----------
 
-// Autocomplete search for the sales screen: type a name, get matches
+// Autocomplete search for the sales screen
 app.get('/api/products/search', async (req, res) => {
   const q = (req.query.q || '').trim();
   if (!q) return res.json([]);
   const { data, error } = await supabase
-    .from('products')
+    .from('product_summary')
     .select('*')
     .ilike('name', `%${q}%`)
     .order('name', { ascending: true })
     .limit(10);
   if (error) return res.status(500).json({ error: error.message });
-  res.json(data);
+  res.json(data.map(p => ({ ...p, low_stock: p.stock_qty < p.low_stock_threshold })));
 });
 
-// Full inventory list, with a computed low_stock flag
+// Full inventory list (derived stock + current price from batches)
 app.get('/api/products', async (req, res) => {
-  const { data, error } = await supabase.from('products').select('*').order('name', { ascending: true });
+  const { data, error } = await supabase.from('product_summary').select('*').order('name', { ascending: true });
   if (error) return res.status(500).json({ error: error.message });
-  const withFlag = data.map(p => ({ ...p, low_stock: p.stock_qty < p.low_stock_threshold }));
-  res.json(withFlag);
+  res.json(data.map(p => ({ ...p, low_stock: p.stock_qty < p.low_stock_threshold })));
 });
 
-// Add a brand new product
+// Add a brand new product (no stock yet — add a batch next to stock it)
 app.post('/api/products', async (req, res) => {
-  const { name, category, unit_price, stock_qty, low_stock_threshold } = req.body;
-  if (!name || unit_price == null) {
-    return res.status(400).json({ error: 'name and unit_price are required' });
+  const { name, category, manufacturer, low_stock_threshold } = req.body;
+  if (!name) return res.status(400).json({ error: 'name is required' });
+  if (category && !CATEGORIES.includes(category)) {
+    return res.status(400).json({ error: `category must be one of ${CATEGORIES.join(', ')}` });
   }
   const { data, error } = await supabase
     .from('products')
     .insert({
       name,
-      category: category || null,
-      unit_price,
-      stock_qty: stock_qty || 0,
+      category: category || 'Other',
+      manufacturer: manufacturer || null,
       low_stock_threshold: low_stock_threshold || 10,
     })
     .select()
@@ -59,26 +60,17 @@ app.post('/api/products', async (req, res) => {
   res.status(201).json(data);
 });
 
-// Restock: atomic increment via RPC
-app.patch('/api/products/:id/restock', async (req, res) => {
-  const { id } = req.params;
-  const { add_qty } = req.body;
-  if (!add_qty || add_qty <= 0) {
-    return res.status(400).json({ error: 'add_qty must be a positive number' });
-  }
-  const { data, error } = await supabase.rpc('restock_product', { p_id: Number(id), p_qty: add_qty });
-  if (error) return res.status(500).json({ error: error.message });
-  res.json(data);
-});
-
-// Edit a product's core fields (price, threshold, category, name)
+// Edit a product's core fields
 app.patch('/api/products/:id', async (req, res) => {
   const { id } = req.params;
-  const { name, category, unit_price, low_stock_threshold } = req.body;
+  const { name, category, manufacturer, low_stock_threshold } = req.body;
+  if (category && !CATEGORIES.includes(category)) {
+    return res.status(400).json({ error: `category must be one of ${CATEGORIES.join(', ')}` });
+  }
   const updates = { updated_at: new Date().toISOString() };
   if (name != null) updates.name = name;
   if (category != null) updates.category = category;
-  if (unit_price != null) updates.unit_price = unit_price;
+  if (manufacturer != null) updates.manufacturer = manufacturer;
   if (low_stock_threshold != null) updates.low_stock_threshold = low_stock_threshold;
 
   const { data, error } = await supabase.from('products').update(updates).eq('id', id).select().single();
@@ -86,9 +78,58 @@ app.patch('/api/products/:id', async (req, res) => {
   res.json(data);
 });
 
+// ---------- Batches (stock-in) ----------
+
+// List active batches for a product (used by the sales screen's batch picker)
+app.get('/api/products/:id/batches', async (req, res) => {
+  const { id } = req.params;
+  const { data, error } = await supabase
+    .from('batches')
+    .select('*')
+    .eq('product_id', id)
+    .gt('qty_remaining', 0)
+    .order('expiry_date', { ascending: true, nullsFirst: false })
+    .order('received_at', { ascending: true });
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
+
+// Add a new batch (i.e. restock). Price entered as a pack price in ₹ or paise;
+// unit_price is computed and stored so every downstream calc stays in rupees.
+app.post('/api/products/:id/batches', async (req, res) => {
+  const { id } = req.params;
+  const { batch_number, seller, pack_size, price_amount, price_unit, qty, expiry_date } = req.body;
+
+  const size = Number(pack_size) || 1;
+  const amount = Number(price_amount);
+  if (!amount || amount <= 0) return res.status(400).json({ error: 'price_amount must be a positive number' });
+  if (!qty || qty <= 0) return res.status(400).json({ error: 'qty must be a positive number' });
+
+  const packPriceRupees = price_unit === 'paise' ? amount / 100 : amount;
+  const unitPrice = Math.round((packPriceRupees / size) * 100) / 100;
+
+  const { data, error } = await supabase
+    .from('batches')
+    .insert({
+      product_id: Number(id),
+      batch_number: batch_number || null,
+      seller: seller || null,
+      pack_size: size,
+      pack_price: packPriceRupees,
+      unit_price: unitPrice,
+      qty_received: qty,
+      qty_remaining: qty,
+      expiry_date: expiry_date || null,
+    })
+    .select()
+    .single();
+  if (error) return res.status(500).json({ error: error.message });
+  res.status(201).json(data);
+});
+
 // ---------- Sales ----------
 
-// Create a sale: { items: [{ product_id, qty }, ...] } — atomic via Postgres function
+// Create a sale: { items: [{ product_id, qty, batch_id? }, ...] } — atomic via Postgres function
 app.post('/api/sales', async (req, res) => {
   const { items } = req.body;
   if (!Array.isArray(items) || items.length === 0) {

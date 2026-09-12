@@ -27,13 +27,13 @@
 
       <table id="cart-table">
         <thead>
-          <tr><th>Product</th><th>Price</th><th>Qty</th><th>Line Total</th><th></th></tr>
+          <tr><th>Product</th><th>Batch</th><th>Price</th><th>Qty</th><th>Line Total</th><th></th></tr>
         </thead>
         <tbody id="cart-body"></tbody>
       </table>
 
       <div class="cart-footer">
-        <div class="total">Total: <span id="cart-total">0.00</span></div>
+        <div class="total">Total: ₹<span id="cart-total">0.00</span></div>
         <button id="checkout-btn" disabled>Complete Sale</button>
       </div>
       <div id="sale-message"></div>
@@ -47,9 +47,13 @@
         <summary>+ Add new product</summary>
         <form id="add-product-form">
           <input type="text" name="name" placeholder="Name" required />
-          <input type="text" name="category" placeholder="Category" />
-          <input type="number" name="unit_price" placeholder="Price" step="0.01" min="0" required />
-          <input type="number" name="stock_qty" placeholder="Initial stock" min="0" />
+          <select name="category">
+            <option value="Tablet">Tablet</option>
+            <option value="Syrup">Syrup</option>
+            <option value="Ointment">Ointment</option>
+            <option value="Other">Other</option>
+          </select>
+          <input type="text" name="manufacturer" placeholder="Manufacturer" />
           <input type="number" name="low_stock_threshold" placeholder="Low stock alert at" min="0" />
           <button type="submit">Add Product</button>
         </form>
@@ -57,7 +61,7 @@
 
       <table id="inventory-table">
         <thead>
-          <tr><th>Name</th><th>Category</th><th>Price</th><th>Stock</th><th>Threshold</th><th>Restock</th></tr>
+          <tr><th>Name</th><th>Category</th><th>Manufacturer</th><th>Price / unit</th><th>Stock</th><th>Threshold</th><th></th></tr>
         </thead>
         <tbody id="inventory-body"></tbody>
       </table>
@@ -69,6 +73,46 @@
       <div id="history-list"></div>
     </section>
   </main>
+
+  <!-- Add batch modal -->
+  <div id="batch-modal" class="modal-overlay">
+    <div class="modal">
+      <h3 id="batch-modal-title">Add stock</h3>
+      <form id="add-batch-form">
+        <input type="hidden" name="product_id" />
+        <label>Batch number
+          <input type="text" name="batch_number" placeholder="e.g. B-1042" />
+        </label>
+        <label>Seller / supplier
+          <input type="text" name="seller" placeholder="e.g. MedSupply Distributors" />
+        </label>
+        <label>Expiry date (optional)
+          <input type="date" name="expiry_date" />
+        </label>
+        <div class="price-row">
+          <label>Pack size
+            <input type="number" name="pack_size" value="1" min="1" required />
+          </label>
+          <label>Price for that pack
+            <input type="number" name="price_amount" step="0.01" min="0" required />
+          </label>
+          <label>Unit
+            <select name="price_unit">
+              <option value="rupees">₹ (rupees)</option>
+              <option value="paise">paise</option>
+            </select>
+          </label>
+        </div>
+        <label>Quantity received (units)
+          <input type="number" name="qty" min="1" required />
+        </label>
+        <div class="modal-actions">
+          <button type="button" id="batch-cancel-btn" class="secondary-btn">Cancel</button>
+          <button type="submit">Add Stock</button>
+        </div>
+      </form>
+    </div>
+  </div>
 
   <script src="app.js"></script>
 </body>

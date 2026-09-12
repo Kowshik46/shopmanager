@@ -1,14 +1,15 @@
 # Pharmacy Billing & Stock Manager
 
-Simple billing and inventory app for a pharmacy. Node/Express backend using the
-Supabase JS client (server-side, with the secret key — bypasses RLS), plain
-HTML/JS frontend.
+Billing and batch-level inventory app for a pharmacy. Node/Express backend
+using the Supabase JS client (server-side, secret key — bypasses RLS), plain
+HTML/JS frontend. Currency: ₹ (rupees), stored as rupees with paise precision
+(2 decimals).
 
 ## Setup
 
 1. **Database**: open your Supabase project's SQL editor and run `schema.sql`.
-   This creates `products`, `sales`, `sale_items`, enables RLS, adds the
-   `restock_product` / `checkout_sale` functions, and seeds a few sample products.
+   Creates `products`, `batches`, `sales`, `sale_items`, the `product_summary`
+   view, RLS, the `checkout_sale` function, and sample data.
 2. **Local run**:
    ```bash
    npm install
@@ -23,24 +24,46 @@ HTML/JS frontend.
 2. On Render: New → Web Service → connect this repo.
 3. Build command: `npm install`, Start command: `npm start`.
 4. Add environment variables:
-   - `SUPABASE_URL` — from Project Settings → API
-   - `SUPABASE_SECRET_KEY` — the secret key (starts `sb_secret_...`). Keep this
-     out of the frontend/browser — it bypasses RLS.
-5. Deploy. Render gives you a public URL.
+   - `SUPABASE_URL`
+   - `SUPABASE_SECRET_KEY` (starts `sb_secret_...`) — keep out of the frontend/browser.
+5. Deploy.
+
+## Data model
+
+- **Products**: identity only — name, category (Tablet / Syrup / Ointment /
+  Other), manufacturer, low-stock threshold. No price or stock stored here.
+- **Batches**: one row per restock — batch number, seller/supplier, pack size,
+  pack price (rupees or paise, converted to a per-unit price on save), quantity
+  received, quantity remaining, optional expiry date.
+- Stock and "current price" shown anywhere are derived live from batches via
+  the `product_summary` view — current price = the batch that will actually be
+  used on the next sale.
+
+## How selling deducts stock
+
+- If you don't pick a batch on a cart line, `checkout_sale` auto-deducts from
+  the oldest active batch first (by expiry date if set, otherwise by date
+  received), splitting across batches if one doesn't have enough.
+- You can also pin a cart line to a specific batch via the dropdown (shows
+  remaining qty + expiry), e.g. to intentionally sell older stock ahead of a
+  newer, cheaper batch.
+- The whole sale (stock check, decrement, sale + line items) runs in one
+  Postgres function, so it's atomic — concurrent sales can't oversell.
 
 ## Features
 
-- **Inventory**: view stock, low-stock flag (qty below threshold, shown in red),
-  add new products, restock existing ones.
-- **Sales**: type a product name, pick from live matches, adjust quantity inline,
-  add more items, checkout. Stock is decremented atomically via a Postgres
-  function (`checkout_sale`), so concurrent sales can't oversell.
-- **History**: list of past sales with line items.
+- **Inventory**: product list with category/manufacturer/derived price/stock,
+  low-stock flag, add new products, "+ Add stock" per product to log a new
+  batch (batch #, seller, expiry, pack price/size, quantity).
+- **Sales**: type a product name, pick from live matches, adjust quantity
+  inline, optionally pin a batch, add more items, checkout.
+- **History**: list of past sales with line items (including which batch was
+  used).
 
 ## Notes
 
 - RLS is enabled on all tables; the backend uses the secret key so it isn't
-  affected. Don't ever expose the secret key to the browser.
-- No login/auth included — add if the pharmacy has multiple staff and you want
+  affected. Never expose the secret key to the browser.
+- No login/auth — add if the pharmacy has multiple staff and you want
   per-user tracking.
-- No build step on the frontend (plain JS) to keep the Render deploy trivial.
+- No frontend build step, to keep the Render deploy trivial.
