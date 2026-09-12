@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Pharmacy Billing & Stock</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <h1>Pharmacy Manager</h1>
+    <nav>
+      <button class="tab-btn active" data-tab="sales">Sales</button>
+      <button class="tab-btn" data-tab="inventory">Inventory</button>
+      <button class="tab-btn" data-tab="history">Sales History</button>
+    </nav>
+  </header>
+
+  <main>
+    <!-- SALES TAB -->
+    <section id="sales" class="tab-panel active">
+      <h2>New Sale</h2>
+      <div class="search-box">
+        <input type="text" id="product-search" placeholder="Start typing a product name..." autocomplete="off" />
+        <div id="search-results" class="dropdown"></div>
+      </div>
+
+      <table id="cart-table">
+        <thead>
+          <tr><th>Product</th><th>Price</th><th>Qty</th><th>Line Total</th><th></th></tr>
+        </thead>
+        <tbody id="cart-body"></tbody>
+      </table>
+
+      <div class="cart-footer">
+        <div class="total">Total: <span id="cart-total">0.00</span></div>
+        <button id="checkout-btn" disabled>Complete Sale</button>
+      </div>
+      <div id="sale-message"></div>
+    </section>
+
+    <!-- INVENTORY TAB -->
+    <section id="inventory" class="tab-panel">
+      <h2>Inventory</h2>
+
+      <details class="add-product">
+        <summary>+ Add new product</summary>
+        <form id="add-product-form">
+          <input type="text" name="name" placeholder="Name" required />
+          <input type="text" name="category" placeholder="Category" />
+          <input type="number" name="unit_price" placeholder="Price" step="0.01" min="0" required />
+          <input type="number" name="stock_qty" placeholder="Initial stock" min="0" />
+          <input type="number" name="low_stock_threshold" placeholder="Low stock alert at" min="0" />
+          <button type="submit">Add Product</button>
+        </form>
+      </details>
+
+      <table id="inventory-table">
+        <thead>
+          <tr><th>Name</th><th>Category</th><th>Price</th><th>Stock</th><th>Threshold</th><th>Restock</th></tr>
+        </thead>
+        <tbody id="inventory-body"></tbody>
+      </table>
+    </section>
+
+    <!-- HISTORY TAB -->
+    <section id="history" class="tab-panel">
+      <h2>Recent Sales</h2>
+      <div id="history-list"></div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
