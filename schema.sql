@@ -88,15 +88,15 @@ insert into products (name, category, manufacturer, low_stock_threshold) values
 on conflict do nothing;
 
 insert into batches (product_id, batch_number, seller, pack_size, pack_price, unit_price, qty_received, qty_remaining, expiry_date)
-select id, 'B-1001', 'MedSupply Distributors', 10, 25.00, 2.50, 120, 120, '2027-06-30' from products where name = 'Paracetamol 500mg'
+select id, 'B-1001', 'MedSupply Distributors', 10, 25.00, 2.50, 120, 120, '2027-06-30'::date from products where name = 'Paracetamol 500mg'
 union all
-select id, 'B-2044', 'HealthCare Traders', 10, 80.00, 8.00, 45, 45, '2027-01-31' from products where name = 'Amoxicillin 250mg'
+select id, 'B-2044', 'HealthCare Traders', 10, 80.00, 8.00, 45, 45, '2027-01-31'::date from products where name = 'Amoxicillin 250mg'
 union all
-select id, 'B-3011', 'MedSupply Distributors', 1, 45.00, 45.00, 8, 8, '2026-12-15' from products where name = 'Cough Syrup 100ml'
+select id, 'B-3011', 'MedSupply Distributors', 1, 45.00, 45.00, 8, 8, '2026-12-15'::date from products where name = 'Cough Syrup 100ml'
 union all
-select id, 'B-4400', 'HealthCare Traders', 15, 75.00, 5.00, 200, 200, '2028-03-31' from products where name = 'Vitamin C 500mg'
+select id, 'B-4400', 'HealthCare Traders', 15, 75.00, 5.00, 200, 200, '2028-03-31'::date from products where name = 'Vitamin C 500mg'
 union all
-select id, 'B-5090', 'MedSupply Distributors', 1, 10.00, 10.00, 5, 5, '2026-10-31' from products where name = 'ORS Sachet'
+select id, 'B-5090', 'MedSupply Distributors', 1, 10.00, 10.00, 5, 5, '2026-10-31'::date from products where name = 'ORS Sachet'
 on conflict do nothing;
 
 -- ---------- RPC: checkout a sale ----------
