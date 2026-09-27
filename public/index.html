@@ -12,7 +12,9 @@
     <nav>
       <button class="tab-btn active" data-tab="sales">Sales</button>
       <button class="tab-btn" data-tab="inventory">Inventory</button>
+      <button class="tab-btn" data-tab="dealers">Dealers</button>
       <button class="tab-btn" data-tab="history">Sales History</button>
+      <button id="logout-btn" class="secondary-btn">Log out</button>
     </nav>
   </header>
 
@@ -25,12 +27,14 @@
         <div id="search-results" class="dropdown"></div>
       </div>
 
+      <div class="table-scroll">
       <table id="cart-table">
         <thead>
           <tr><th>Product</th><th>Batch</th><th>Price</th><th>Qty</th><th>Line Total</th><th></th></tr>
         </thead>
         <tbody id="cart-body"></tbody>
       </table>
+      </div>
 
       <div class="cart-footer">
         <div class="total">Total: ₹<span id="cart-total">0.00</span></div>
@@ -46,25 +50,126 @@
       <details class="add-product">
         <summary>+ Add new product</summary>
         <form id="add-product-form">
-          <input type="text" name="name" placeholder="Name" required />
-          <select name="category">
+          <div class="form-section-label">Product</div>
+          <input type="text" name="name" placeholder="Medicine name" required />
+          <select name="category" id="product-category-select">
             <option value="Tablet">Tablet</option>
             <option value="Syrup">Syrup</option>
             <option value="Ointment">Ointment</option>
             <option value="Other">Other</option>
           </select>
           <input type="text" name="manufacturer" placeholder="Manufacturer" />
-          <input type="number" name="low_stock_threshold" placeholder="Low stock alert at" min="0" />
-          <button type="submit">Add Product</button>
+          <input type="text" name="rack_location" placeholder="Rack (e.g. A1)" />
+          <label class="checkbox-label">
+            <input type="checkbox" name="prescription_required" />
+            Prescription required (Schedule H/H1/X)
+          </label>
+          <input type="number" name="low_stock_threshold" placeholder="Low stock alert at" min="0" inputmode="numeric" />
+
+          <div class="form-section-label">Initial stock</div>
+          <label>Dealer
+            <select name="dealer_id" id="product-dealer-select" required>
+              <option value="">Select dealer...</option>
+              <option value="__new__">+ Add new dealer</option>
+            </select>
+          </label>
+          <div id="product-new-dealer-fields" class="new-dealer-fields" hidden>
+            <input type="text" id="product-new-dealer-name" placeholder="Dealer name" />
+            <input type="text" id="product-new-dealer-phone" placeholder="Phone (optional)" />
+            <input type="text" id="product-new-dealer-gstin" placeholder="GSTIN (optional)" />
+            <input type="text" id="product-new-dealer-address" placeholder="Address (optional)" />
+          </div>
+
+          <input type="text" name="batch_number" placeholder="Batch number (e.g. B-1042)" />
+
+          <label>Expiry date
+            <input type="date" name="expiry_date" required />
+          </label>
+
+          <div class="price-row">
+            <label id="product-pack-size-label">Units per pack
+              <input type="number" name="pack_size" value="1" min="1" required inputmode="numeric" />
+            </label>
+            <label>Unit
+              <select name="price_unit">
+                <option value="rupees">₹ (rupees)</option>
+                <option value="paise">paise</option>
+              </select>
+            </label>
+          </div>
+          <div class="price-row">
+            <label>MRP for that pack
+              <input type="number" name="mrp_amount" step="0.01" min="0" required inputmode="decimal" />
+            </label>
+            <label>Cost from dealer (per pack)
+              <input type="number" name="cost_amount" step="0.01" min="0" required inputmode="decimal" />
+            </label>
+          </div>
+
+          <label>Quantity received (units)
+            <input type="number" name="qty" min="1" required inputmode="numeric" />
+          </label>
+
+          <button type="submit">Add Product &amp; Stock</button>
         </form>
       </details>
 
+      <div class="inventory-filters">
+        <input type="text" id="inventory-search" placeholder="Search name / manufacturer / rack..." />
+        <select id="inventory-category-filter">
+          <option value="">All categories</option>
+          <option value="Tablet">Tablet</option>
+          <option value="Syrup">Syrup</option>
+          <option value="Ointment">Ointment</option>
+          <option value="Other">Other</option>
+        </select>
+        <label class="checkbox-label"><input type="checkbox" id="inventory-lowstock-filter" /> Low stock only</label>
+        <label class="checkbox-label"><input type="checkbox" id="inventory-rx-filter" /> Prescription only</label>
+      </div>
+
+      <div class="table-scroll">
       <table id="inventory-table">
         <thead>
-          <tr><th>Name</th><th>Category</th><th>Manufacturer</th><th>Price / unit</th><th>Stock</th><th>Threshold</th><th></th></tr>
+          <tr>
+            <th data-sort="name">Name</th>
+            <th data-sort="category">Category</th>
+            <th data-sort="manufacturer">Manufacturer</th>
+            <th data-sort="rack_location">Rack</th>
+            <th data-sort="unit_price">Price / unit</th>
+            <th data-sort="stock_qty">Stock</th>
+            <th data-sort="low_stock_threshold">Threshold</th>
+            <th></th>
+          </tr>
         </thead>
         <tbody id="inventory-body"></tbody>
       </table>
+      </div>
+    </section>
+
+    <!-- DEALERS TAB -->
+    <section id="dealers" class="tab-panel">
+      <h2>Dealers</h2>
+
+      <details class="add-product">
+        <summary>+ Add new dealer</summary>
+        <form id="add-dealer-form">
+          <input type="text" name="name" placeholder="Dealer name" required />
+          <input type="text" name="phone" placeholder="Phone" />
+          <input type="text" name="gstin" placeholder="GSTIN" />
+          <input type="text" name="address" placeholder="Address" />
+          <input type="text" name="notes" placeholder="Notes" />
+          <button type="submit">Add Dealer</button>
+        </form>
+      </details>
+
+      <div class="table-scroll">
+      <table id="dealers-table">
+        <thead>
+          <tr><th>Name</th><th>Phone</th><th>GSTIN</th><th>Address</th><th>Notes</th><th></th></tr>
+        </thead>
+        <tbody id="dealers-body"></tbody>
+      </table>
+      </div>
     </section>
 
     <!-- HISTORY TAB -->
@@ -83,18 +188,27 @@
         <label>Batch number
           <input type="text" name="batch_number" placeholder="e.g. B-1042" />
         </label>
-        <label>Seller / supplier
-          <input type="text" name="seller" placeholder="e.g. MedSupply Distributors" />
+
+        <label>Dealer
+          <select name="dealer_id" id="dealer-select" required>
+            <option value="">Select dealer...</option>
+            <option value="__new__">+ Add new dealer</option>
+          </select>
         </label>
-        <label>Expiry date (optional)
-          <input type="date" name="expiry_date" />
+        <div id="new-dealer-fields" class="new-dealer-fields" hidden>
+          <input type="text" id="new-dealer-name" placeholder="Dealer name" />
+          <input type="text" id="new-dealer-phone" placeholder="Phone (optional)" />
+          <input type="text" id="new-dealer-gstin" placeholder="GSTIN (optional)" />
+          <input type="text" id="new-dealer-address" placeholder="Address (optional)" />
+        </div>
+
+        <label>Expiry date
+          <input type="date" name="expiry_date" required />
         </label>
+
         <div class="price-row">
-          <label>Pack size
-            <input type="number" name="pack_size" value="1" min="1" required />
-          </label>
-          <label>Price for that pack
-            <input type="number" name="price_amount" step="0.01" min="0" required />
+          <label id="pack-size-label">Units per pack
+            <input type="number" name="pack_size" value="1" min="1" required inputmode="numeric" />
           </label>
           <label>Unit
             <select name="price_unit">
@@ -103,12 +217,50 @@
             </select>
           </label>
         </div>
+        <div class="price-row">
+          <label>MRP for that pack
+            <input type="number" name="mrp_amount" step="0.01" min="0" required inputmode="decimal" />
+          </label>
+          <label>Cost from dealer (per pack)
+            <input type="number" name="cost_amount" step="0.01" min="0" required inputmode="decimal" />
+          </label>
+        </div>
+
         <label>Quantity received (units)
-          <input type="number" name="qty" min="1" required />
+          <input type="number" name="qty" min="1" required inputmode="numeric" />
         </label>
         <div class="modal-actions">
           <button type="button" id="batch-cancel-btn" class="secondary-btn">Cancel</button>
           <button type="submit">Add Stock</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Edit dealer modal -->
+  <div id="dealer-modal" class="modal-overlay">
+    <div class="modal">
+      <h3>Edit dealer</h3>
+      <form id="edit-dealer-form">
+        <input type="hidden" name="dealer_id" />
+        <label>Name
+          <input type="text" name="name" required />
+        </label>
+        <label>Phone
+          <input type="text" name="phone" />
+        </label>
+        <label>GSTIN
+          <input type="text" name="gstin" />
+        </label>
+        <label>Address
+          <input type="text" name="address" />
+        </label>
+        <label>Notes
+          <input type="text" name="notes" />
+        </label>
+        <div class="modal-actions">
+          <button type="button" id="dealer-cancel-btn" class="secondary-btn">Cancel</button>
+          <button type="submit">Save</button>
         </div>
       </form>
     </div>

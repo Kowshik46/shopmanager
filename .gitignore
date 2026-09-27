@@ -1,2 +1,6 @@
-node_modules/
+__pycache__/
+*.pyc
+.venv/
+venv/
 .env
+graphify-out/

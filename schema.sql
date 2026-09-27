@@ -1,18 +1,34 @@
 -- Pharmacy billing & stock management schema
 -- Run this once in Supabase's SQL editor.
--- NOTE: if you already ran the old version of this file, either reset the
--- project's tables first or drop products/sales/sale_items/batches and the
--- functions before re-running (this file uses `create table if not exists`,
--- so it won't rebuild tables that already exist in the old shape).
+--
+-- This version adds dealers (was a free-text "seller" column), per-batch cost
+-- price alongside MRP (for profit tracking), makes expiry required, and adds
+-- prescription_required + rack_location to products. If you ran an earlier
+-- version of this file, drop the old objects first:
+--   drop table if exists sale_items, sales, batches, products, dealers cascade;
+--   drop function if exists checkout_sale;
+--   drop view if exists product_summary;
+
+create table if not exists dealers (
+  id         bigserial primary key,
+  name       text not null unique,
+  phone      text,
+  address    text,
+  gstin      text,
+  notes      text,
+  created_at timestamptz not null default now()
+);
 
 create table if not exists products (
-  id            bigserial primary key,
-  name          text not null,
-  category      text not null default 'Other' check (category in ('Tablet','Syrup','Ointment','Other')),
-  manufacturer  text,
-  low_stock_threshold integer not null default 10,
-  created_at    timestamptz not null default now(),
-  updated_at    timestamptz not null default now()
+  id                     bigserial primary key,
+  name                   text not null,
+  category               text not null default 'Other' check (category in ('Tablet','Syrup','Ointment','Other')),
+  manufacturer           text,
+  prescription_required  boolean not null default false,  -- Schedule H/H1/X
+  rack_location          text,                             -- shop's own shelf code, e.g. 'A1'
+  low_stock_threshold    integer not null default 10,
+  created_at             timestamptz not null default now(),
+  updated_at             timestamptz not null default now()
 );
 
 create extension if not exists pg_trgm;
@@ -21,18 +37,20 @@ create index if not exists idx_products_name_trgm on products using gin (name gi
 -- Each restock creates a new batch. Stock and "current price" are always
 -- derived from batches, never stored redundantly on products.
 create table if not exists batches (
-  id            bigserial primary key,
-  product_id    bigint not null references products(id) on delete cascade,
-  batch_number  text,
-  seller        text,                          -- supplier/distributor this batch was bought from
-  pack_size     integer not null default 1,     -- e.g. 10 tablets per strip
-  pack_price    numeric(10,2),                  -- price for one pack (in rupees), for reference
-  unit_price    numeric(10,2) not null,         -- price per single unit = pack_price / pack_size
-  qty_received  integer not null,
-  qty_remaining integer not null,
-  expiry_date   date,                           -- optional
-  received_at   timestamptz not null default now(),
-  created_at    timestamptz not null default now()
+  id               bigserial primary key,
+  product_id       bigint not null references products(id) on delete cascade,
+  dealer_id        bigint references dealers(id),
+  batch_number     text,
+  pack_size        integer not null default 1,     -- e.g. 10 tablets per strip
+  mrp_pack_price   numeric(10,2) not null,          -- MRP for one pack (rupees)
+  mrp_unit_price   numeric(10,2) not null,          -- what we charge = mrp_pack_price / pack_size
+  cost_pack_price  numeric(10,2) not null,          -- what we paid the dealer, per pack
+  cost_unit_price  numeric(10,2) not null,          -- cost_pack_price / pack_size
+  qty_received     integer not null,
+  qty_remaining    integer not null,
+  expiry_date      date not null,
+  received_at      timestamptz not null default now(),
+  created_at       timestamptz not null default now()
 );
 
 create index if not exists idx_batches_product on batches(product_id);
@@ -40,7 +58,8 @@ create index if not exists idx_batches_fefo on batches(product_id, expiry_date, 
 
 create table if not exists sales (
   id          bigserial primary key,
-  total       numeric(10, 2) not null default 0,
+  total       numeric(10, 2) not null default 0,  -- what the customer paid (MRP side)
+  total_cost  numeric(10, 2) not null default 0,   -- what we paid the dealer for what was sold
   created_at  timestamptz not null default now()
 );
 
@@ -52,7 +71,8 @@ create table if not exists sale_items (
   batch_id      bigint references batches(id),
   batch_number  text,
   qty           integer not null,
-  unit_price    numeric(10, 2) not null,
+  unit_price    numeric(10, 2) not null,  -- MRP charged, snapshotted from the batch
+  cost_price    numeric(10, 2) not null,  -- dealer cost, snapshotted from the batch (for margin)
   line_total    numeric(10, 2) not null
 );
 
@@ -60,12 +80,13 @@ create table if not exists sale_items (
 -- charged next (the oldest active batch's price), per product.
 create or replace view product_summary as
 select
-  p.id, p.name, p.category, p.manufacturer, p.low_stock_threshold, p.created_at, p.updated_at,
+  p.id, p.name, p.category, p.manufacturer, p.prescription_required,
+  p.rack_location, p.low_stock_threshold, p.created_at, p.updated_at,
   coalesce((select sum(b.qty_remaining) from batches b where b.product_id = p.id and b.qty_remaining > 0), 0)::int as stock_qty,
   (
-    select b2.unit_price from batches b2
+    select b2.mrp_unit_price from batches b2
     where b2.product_id = p.id and b2.qty_remaining > 0
-    order by b2.expiry_date asc nulls last, b2.received_at asc
+    order by b2.expiry_date asc, b2.received_at asc
     limit 1
   ) as unit_price
 from products p;
@@ -73,30 +94,41 @@ from products p;
 -- RLS is on for all tables. The backend talks to Supabase using the SECRET
 -- key (service role), which bypasses RLS entirely, so no policies are
 -- needed for this app to work.
+alter table dealers enable row level security;
 alter table products enable row level security;
 alter table batches enable row level security;
 alter table sales enable row level security;
 alter table sale_items enable row level security;
 
 -- Sample data so you can try it immediately (delete later)
-insert into products (name, category, manufacturer, low_stock_threshold) values
-  ('Paracetamol 500mg', 'Tablet', 'Cipla', 20),
-  ('Amoxicillin 250mg', 'Tablet', 'Sun Pharma', 15),
-  ('Cough Syrup 100ml', 'Syrup', 'Dabur', 10),
-  ('Vitamin C 500mg', 'Tablet', 'HealthVit', 30),
-  ('ORS Sachet', 'Other', 'FDC Ltd', 20)
+insert into dealers (name, phone) values
+  ('MedSupply Distributors', '9876543210'),
+  ('HealthCare Traders', '9876500000')
 on conflict do nothing;
 
-insert into batches (product_id, batch_number, seller, pack_size, pack_price, unit_price, qty_received, qty_remaining, expiry_date)
-select id, 'B-1001', 'MedSupply Distributors', 10, 25.00, 2.50, 120, 120, '2027-06-30'::date from products where name = 'Paracetamol 500mg'
+insert into products (name, category, manufacturer, prescription_required, rack_location, low_stock_threshold) values
+  ('Paracetamol 500mg', 'Tablet', 'Cipla', false, 'A1', 20),
+  ('Amoxicillin 250mg', 'Tablet', 'Sun Pharma', true, 'A2', 15),
+  ('Cough Syrup 100ml', 'Syrup', 'Dabur', false, 'B1', 10),
+  ('Vitamin C 500mg', 'Tablet', 'HealthVit', false, 'A3', 30),
+  ('ORS Sachet', 'Other', 'FDC Ltd', false, 'C1', 20)
+on conflict do nothing;
+
+insert into batches (product_id, dealer_id, batch_number, pack_size, mrp_pack_price, mrp_unit_price, cost_pack_price, cost_unit_price, qty_received, qty_remaining, expiry_date)
+select p.id, d.id, 'B-1001', 10, 25.00, 2.50, 20.00, 2.00, 120, 120, '2027-06-30'::date
+from products p, dealers d where p.name = 'Paracetamol 500mg' and d.name = 'MedSupply Distributors'
 union all
-select id, 'B-2044', 'HealthCare Traders', 10, 80.00, 8.00, 45, 45, '2027-01-31'::date from products where name = 'Amoxicillin 250mg'
+select p.id, d.id, 'B-2044', 10, 80.00, 8.00, 65.00, 6.50, 45, 45, '2027-01-31'::date
+from products p, dealers d where p.name = 'Amoxicillin 250mg' and d.name = 'HealthCare Traders'
 union all
-select id, 'B-3011', 'MedSupply Distributors', 1, 45.00, 45.00, 8, 8, '2026-12-15'::date from products where name = 'Cough Syrup 100ml'
+select p.id, d.id, 'B-3011', 1, 45.00, 45.00, 36.00, 36.00, 8, 8, '2026-12-15'::date
+from products p, dealers d where p.name = 'Cough Syrup 100ml' and d.name = 'MedSupply Distributors'
 union all
-select id, 'B-4400', 'HealthCare Traders', 15, 75.00, 5.00, 200, 200, '2028-03-31'::date from products where name = 'Vitamin C 500mg'
+select p.id, d.id, 'B-4400', 15, 75.00, 5.00, 60.00, 4.00, 200, 200, '2028-03-31'::date
+from products p, dealers d where p.name = 'Vitamin C 500mg' and d.name = 'HealthCare Traders'
 union all
-select id, 'B-5090', 'MedSupply Distributors', 1, 10.00, 10.00, 5, 5, '2026-10-31'::date from products where name = 'ORS Sachet'
+select p.id, d.id, 'B-5090', 1, 10.00, 10.00, 7.50, 7.50, 5, 5, '2026-10-31'::date
+from products p, dealers d where p.name = 'ORS Sachet' and d.name = 'MedSupply Distributors'
 on conflict do nothing;
 
 -- ---------- RPC: checkout a sale ----------
@@ -111,17 +143,19 @@ declare
   remaining_qty int;
   v_sale_id bigint;
   v_total numeric(10,2) := 0;
+  v_total_cost numeric(10,2) := 0;
   v_items jsonb := '[]'::jsonb;
   b record;
   v_take int;
   v_line_total numeric(10,2);
+  v_line_cost numeric(10,2);
   prod_name text;
 begin
   if jsonb_array_length(p_items) = 0 then
     raise exception 'No items in sale';
   end if;
 
-  insert into sales (total) values (0) returning id into v_sale_id;
+  insert into sales (total, total_cost) values (0, 0) returning id into v_sale_id;
 
   for item in select * from jsonb_array_elements(p_items)
   loop
@@ -142,36 +176,40 @@ begin
       end if;
 
       update batches set qty_remaining = qty_remaining - remaining_qty where id = b.id;
-      v_line_total := b.unit_price * remaining_qty;
+      v_line_total := b.mrp_unit_price * remaining_qty;
+      v_line_cost := b.cost_unit_price * remaining_qty;
       v_total := v_total + v_line_total;
+      v_total_cost := v_total_cost + v_line_cost;
 
-      insert into sale_items (sale_id, product_id, product_name, batch_id, batch_number, qty, unit_price, line_total)
-      values (v_sale_id, b.product_id, prod_name, b.id, b.batch_number, remaining_qty, b.unit_price, v_line_total);
+      insert into sale_items (sale_id, product_id, product_name, batch_id, batch_number, qty, unit_price, cost_price, line_total)
+      values (v_sale_id, b.product_id, prod_name, b.id, b.batch_number, remaining_qty, b.mrp_unit_price, b.cost_unit_price, v_line_total);
 
       v_items := v_items || jsonb_build_object(
         'product_id', b.product_id, 'product_name', prod_name, 'batch_number', b.batch_number,
-        'qty', remaining_qty, 'unit_price', b.unit_price, 'line_total', v_line_total
+        'qty', remaining_qty, 'unit_price', b.mrp_unit_price, 'line_total', v_line_total
       );
     else
       for b in
         select * from batches
         where product_id = (item->>'product_id')::bigint and qty_remaining > 0
-        order by expiry_date asc nulls last, received_at asc
+        order by expiry_date asc, received_at asc
         for update
       loop
         exit when remaining_qty <= 0;
         v_take := least(b.qty_remaining, remaining_qty);
 
         update batches set qty_remaining = qty_remaining - v_take where id = b.id;
-        v_line_total := b.unit_price * v_take;
+        v_line_total := b.mrp_unit_price * v_take;
+        v_line_cost := b.cost_unit_price * v_take;
         v_total := v_total + v_line_total;
+        v_total_cost := v_total_cost + v_line_cost;
 
-        insert into sale_items (sale_id, product_id, product_name, batch_id, batch_number, qty, unit_price, line_total)
-        values (v_sale_id, b.product_id, prod_name, b.id, b.batch_number, v_take, b.unit_price, v_line_total);
+        insert into sale_items (sale_id, product_id, product_name, batch_id, batch_number, qty, unit_price, cost_price, line_total)
+        values (v_sale_id, b.product_id, prod_name, b.id, b.batch_number, v_take, b.mrp_unit_price, b.cost_unit_price, v_line_total);
 
         v_items := v_items || jsonb_build_object(
           'product_id', b.product_id, 'product_name', prod_name, 'batch_number', b.batch_number,
-          'qty', v_take, 'unit_price', b.unit_price, 'line_total', v_line_total
+          'qty', v_take, 'unit_price', b.mrp_unit_price, 'line_total', v_line_total
         );
 
         remaining_qty := remaining_qty - v_take;
@@ -183,7 +221,7 @@ begin
     end if;
   end loop;
 
-  update sales set total = v_total where id = v_sale_id;
+  update sales set total = v_total, total_cost = v_total_cost where id = v_sale_id;
 
   return jsonb_build_object('id', v_sale_id, 'total', v_total, 'items', v_items, 'created_at', now());
 end;
