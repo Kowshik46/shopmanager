@@ -202,6 +202,7 @@ tr.low-stock-row { background: #fff3f3; }
 }
 .history-card .meta { display: flex; justify-content: space-between; font-weight: 600; font-size: 16px; }
 .history-card .profit { font-weight: 400; font-size: 13px; color: #1b5e20; }
+.history-card .patient-line { font-size: 13px; color: #555; margin-top: 4px; }
 .history-card ul { margin: 8px 0 0 0; padding-left: 18px; font-size: 14px; color: #444; }
 
 /* ---- Modals (batch, dealer edit) ---- */
@@ -233,6 +234,22 @@ tr.low-stock-row { background: #fff3f3; }
 .new-dealer-fields { display: flex; flex-direction: column; gap: 10px; padding: 12px; background: #f4f6f8; border-radius: 8px; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px; }
 .modal-actions button { flex: 1; }
+
+.whatsapp-btn {
+  background: #25D366;
+  color: white;
+  border: none;
+  padding: 12px 20px;
+  border-radius: 8px;
+  font-size: 16px;
+  min-height: 48px;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  font-weight: 600;
+}
 
 .add-batch-btn { background: #2e7d32; padding: 10px 16px; font-size: 14px; min-height: 40px; }
 .edit-dealer-btn { padding: 10px 16px; font-size: 14px; min-height: 40px; }

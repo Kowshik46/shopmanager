@@ -166,21 +166,56 @@ function currentUnitPrice(item) {
   return item.unit_price;
 }
 
-checkoutBtn.addEventListener('click', async () => {
-  checkoutBtn.disabled = true;
+// ---------- Complete sale / bill modal ----------
+const billModal = document.getElementById('bill-modal');
+const billStepAsk = document.getElementById('bill-step-ask');
+const billForm = document.getElementById('bill-form');
+const billResult = document.getElementById('bill-result');
+
+function showBillStep(step) {
+  billStepAsk.hidden = step !== 'ask';
+  billForm.hidden = step !== 'form';
+  billResult.hidden = step !== 'result';
+}
+
+checkoutBtn.addEventListener('click', () => {
+  showBillStep('ask');
+  billModal.classList.add('open');
+});
+
+document.getElementById('bill-yes-btn').addEventListener('click', () => showBillStep('form'));
+document.getElementById('bill-back-btn').addEventListener('click', () => showBillStep('ask'));
+document.getElementById('bill-close-btn').addEventListener('click', () => billModal.classList.remove('open'));
+
+document.getElementById('bill-skip-btn').addEventListener('click', () => completeSale(null));
+
+billForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const form = e.target;
+  await completeSale({
+    patient_name: form.patient_name.value,
+    patient_age: form.patient_age.value ? parseInt(form.patient_age.value) : null,
+    patient_phone: form.patient_phone.value,
+  });
+});
+
+async function completeSale(patientInfo) {
   saleMessage.textContent = '';
   saleMessage.className = '';
   try {
+    const payload = {
+      items: cart.map(c => ({
+        product_id: c.product_id,
+        qty: c.qty,
+        batch_id: c.batch_id ? Number(c.batch_id) : null,
+      })),
+    };
+    if (patientInfo) Object.assign(payload, patientInfo);
+
     const res = await apiFetch('/api/sales', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        items: cart.map(c => ({
-          product_id: c.product_id,
-          qty: c.qty,
-          batch_id: c.batch_id ? Number(c.batch_id) : null,
-        })),
-      }),
+      body: JSON.stringify(payload),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Sale failed');
@@ -189,12 +224,50 @@ checkoutBtn.addEventListener('click', async () => {
     saleMessage.className = 'success';
     cart = [];
     renderCart();
+
+    if (patientInfo) {
+      showBillResult(data, patientInfo);
+    } else {
+      billModal.classList.remove('open');
+    }
   } catch (err) {
+    if (billModal.classList.contains('open')) billModal.classList.remove('open');
     saleMessage.textContent = err.message;
     saleMessage.className = 'error';
-    checkoutBtn.disabled = false;
   }
-});
+}
+
+// Formats a 10-digit Indian mobile number for a wa.me link; passes through
+// anything else as-is (e.g. already has a country code).
+function toWhatsAppPhone(raw) {
+  const digits = raw.replace(/\D/g, '');
+  return digits.length === 10 ? '91' + digits : digits;
+}
+
+function buildBillText(sale, patientInfo) {
+  const lines = sale.items.map((i, idx) => `${idx + 1}. ${i.product_name} x ${i.qty} = Rs.${Number(i.line_total).toFixed(2)}`);
+  return [
+    'Pharmacy Manager - Bill',
+    '',
+    `Patient: ${patientInfo.patient_name}${patientInfo.patient_age ? ' (Age ' + patientInfo.patient_age + ')' : ''}`,
+    `Date: ${new Date(sale.created_at).toLocaleString()}`,
+    '',
+    'Items:',
+    ...lines,
+    '',
+    `Total: Rs.${Number(sale.total).toFixed(2)}`,
+    '',
+    'Thank you for your purchase!',
+  ].join('\n');
+}
+
+function showBillResult(sale, patientInfo) {
+  showBillStep('result');
+  document.getElementById('bill-result-message').textContent = `Sale #${sale.id} — total ₹${Number(sale.total).toFixed(2)}`;
+  const text = buildBillText(sale, patientInfo);
+  const phone = toWhatsAppPhone(patientInfo.patient_phone);
+  document.getElementById('bill-whatsapp-link').href = `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
+}
 
 // ---------- Inventory ----------
 const inventoryBody = document.getElementById('inventory-body');
@@ -572,6 +645,7 @@ async function loadHistory() {
         <span>Sale #${s.id} — ${new Date(s.created_at).toLocaleString()}</span>
         <span>₹${Number(s.total).toFixed(2)} <span class="profit">(profit ₹${profit.toFixed(2)})</span></span>
       </div>
+      ${s.patient_name ? `<div class="patient-line">Patient: ${escapeHtml(s.patient_name)}${s.patient_age ? ' (age ' + s.patient_age + ')' : ''}${s.patient_phone ? ' · ' + escapeHtml(s.patient_phone) : ''}</div>` : ''}
       <ul>
         ${s.items.map(i => `<li>${escapeHtml(i.product_name)}${i.batch_number ? ' (batch ' + escapeHtml(i.batch_number) + ')' : ''} × ${i.qty} = ₹${Number(i.line_total).toFixed(2)}</li>`).join('')}
       </ul>

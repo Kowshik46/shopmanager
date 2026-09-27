@@ -57,10 +57,13 @@ create index if not exists idx_batches_product on batches(product_id);
 create index if not exists idx_batches_fefo on batches(product_id, expiry_date, received_at);
 
 create table if not exists sales (
-  id          bigserial primary key,
-  total       numeric(10, 2) not null default 0,  -- what the customer paid (MRP side)
-  total_cost  numeric(10, 2) not null default 0,   -- what we paid the dealer for what was sold
-  created_at  timestamptz not null default now()
+  id             bigserial primary key,
+  total          numeric(10, 2) not null default 0,  -- what the customer paid (MRP side)
+  total_cost     numeric(10, 2) not null default 0,   -- what we paid the dealer for what was sold
+  patient_name   text,                                -- set only when a bill was generated
+  patient_age    integer,
+  patient_phone  text,
+  created_at     timestamptz not null default now()
 );
 
 create table if not exists sale_items (
@@ -134,7 +137,12 @@ on conflict do nothing;
 -- ---------- RPC: checkout a sale ----------
 -- p_items shape: [{"product_id":1,"qty":2,"batch_id":null}, ...]
 -- batch_id null/omitted => auto-deduct oldest batch(es) first (FEFO by expiry, then FIFO by received date)
-create or replace function checkout_sale(p_items jsonb)
+create or replace function checkout_sale(
+  p_items jsonb,
+  p_patient_name text default null,
+  p_patient_age int default null,
+  p_patient_phone text default null
+)
 returns jsonb
 language plpgsql
 as $$
@@ -155,7 +163,9 @@ begin
     raise exception 'No items in sale';
   end if;
 
-  insert into sales (total, total_cost) values (0, 0) returning id into v_sale_id;
+  insert into sales (total, total_cost, patient_name, patient_age, patient_phone)
+  values (0, 0, p_patient_name, p_patient_age, p_patient_phone)
+  returning id into v_sale_id;
 
   for item in select * from jsonb_array_elements(p_items)
   loop

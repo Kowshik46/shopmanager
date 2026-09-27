@@ -179,6 +179,46 @@
     </section>
   </main>
 
+  <!-- Complete sale / bill modal -->
+  <div id="bill-modal" class="modal-overlay">
+    <div class="modal">
+      <div id="bill-step-ask">
+        <h3>Complete sale</h3>
+        <p>Generate a bill to send to the patient?</p>
+        <div class="modal-actions">
+          <button type="button" id="bill-skip-btn" class="secondary-btn">No, just complete sale</button>
+          <button type="button" id="bill-yes-btn">Yes, add patient details</button>
+        </div>
+      </div>
+
+      <form id="bill-form" hidden>
+        <h3>Patient details</h3>
+        <label>Patient name
+          <input type="text" name="patient_name" required />
+        </label>
+        <label>Age
+          <input type="number" name="patient_age" min="0" inputmode="numeric" />
+        </label>
+        <label>Phone (for WhatsApp)
+          <input type="tel" name="patient_phone" required inputmode="numeric" placeholder="10-digit mobile number" />
+        </label>
+        <div class="modal-actions">
+          <button type="button" id="bill-back-btn" class="secondary-btn">Back</button>
+          <button type="submit">Complete Sale</button>
+        </div>
+      </form>
+
+      <div id="bill-result" hidden>
+        <h3>Sale complete</h3>
+        <p id="bill-result-message"></p>
+        <div class="modal-actions">
+          <a id="bill-whatsapp-link" href="#" target="_blank" rel="noopener" class="whatsapp-btn">Send Bill via WhatsApp</a>
+          <button type="button" id="bill-close-btn" class="secondary-btn">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Add batch modal -->
   <div id="batch-modal" class="modal-overlay">
     <div class="modal">

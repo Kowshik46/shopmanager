@@ -305,8 +305,14 @@ def create_sale():
     items = body.get("items")
     if not isinstance(items, list) or len(items) == 0:
         return jsonify(error="items array is required"), 400
+    rpc_params = {
+        "p_items": items,
+        "p_patient_name": body.get("patient_name") or None,
+        "p_patient_age": body.get("patient_age") or None,
+        "p_patient_phone": body.get("patient_phone") or None,
+    }
     try:
-        res = supabase.rpc("checkout_sale", {"p_items": items}).execute()
+        res = supabase.rpc("checkout_sale", rpc_params).execute()
     except Exception as e:
         return jsonify(error=error_message(e)), 400
     return jsonify(res.data), 201
